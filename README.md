@@ -13,6 +13,9 @@ Build instruction:
 
 Set up application on AWS:
 1.run packer build ami.pkr.hcl to build AMI in AWS
+
 2.when merge request the packer would be autoly run
+
 3.cd terraform and run 'terraform init && terraform apply 'to build infrastructure
+
 4.the application will configure itself in the aws instance
