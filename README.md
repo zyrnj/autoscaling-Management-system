@@ -12,6 +12,7 @@ Build instruction:
 //5. test using pytest, to run test please don't remove, rename Test.py file
 
 Set up application on AWS:
+
 1.run packer build ami.pkr.hcl to build AMI in AWS
 
 2.when merge request the packer would be autoly run
