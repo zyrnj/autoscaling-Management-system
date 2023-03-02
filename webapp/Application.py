@@ -1,18 +1,36 @@
 import datetime
 import json
 import re
+import boto3
+import os
 from flask import request, app, Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_httpauth import HTTPBasicAuth
 from flask_bcrypt import Bcrypt
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:1qaz2wsx@localhost/sys'
+db_username = os.environ.get('DB_USERNAME')
+db_password = os.environ.get('DB_PASSWORD')
+db_hostname = os.environ.get('DB_HOSTNAME')
+s3_bucket_name = os.environ.get('S3_BUCKET_NAME')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{db_username}:{db_password}@{db_hostname}/sys'
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:1qaz2wsx@localhost/sys'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 auth = HTTPBasicAuth()
 
+AWS_ACCESS_KEY_ID = 'AKIAZIRVDJPHI53ZWN4I'
+AWS_SECRET_ACCESS_KEY = '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'
+AWS_REGION = 'us-east-1'
+AWS_BUCKET_NAME = s3_bucket_name
+
+# S3 client
+s3 = boto3.client('s3',
+                  aws_access_key_id=AWS_ACCESS_KEY_ID,
+                  aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+                  region_name=AWS_REGION)
 @auth.verify_password
 def verify_password(username, password):
     query=db.session.query(User).filter_by(username=username).all()
@@ -44,9 +62,6 @@ class User(db.Model):
             'account_created': self.account_created.strftime("%Y-%m-%d %H:%M:%S"),
             'account_updated': self.account_updated.strftime("%Y-%m-%d %H:%M:%S")
         }
-   # def __repr__(self):
-    #    return self.first_name
-            #'<User %r>' % self.username+self.id
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -78,6 +93,30 @@ class Product(db.Model):
             'date_added': self.date_added.strftime("%Y-%m-%d %H:%M:%S"),
             'date_last_updated': self.date_last_updated.strftime("%Y-%m-%d %H:%M:%S"),
             'owner_user_id': self.owner_user_id
+        }
+
+class Image(db.Model):
+    image_id=db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer)
+    file_name = db.Column(db.String(80))
+    date_created = db.Column(db.DateTime, default=datetime.datetime.now())
+    s3_bucket_path = db.Column(db.String(300))
+    owner_user_id = db.Column(db.Integer)
+    key = db.Column(db.String(80))
+
+    def __init__(self, product_id, file_name, s3_bucket_path,owner_user_id,key):
+        self.product_id = product_id
+        self.file_name=file_name
+        self.s3_bucket_path=s3_bucket_path
+        self.owner_user_id=owner_user_id
+        self.key=key
+    def to_json(self):
+        return {
+            "image_id": self.image_id,
+            "product_id": self.product_id,
+            "file_name": self.file_name,
+            'date_created': self.date_created.strftime("%Y-%m-%d %H:%M:%S"),
+            "s3_bucket_path": self.s3_bucket_path
         }
 
 with app.app_context():
@@ -132,7 +171,6 @@ def createUser():  # 视图函数
         db.session.commit()
         return response
 
-
 @app.route('/healthz', methods=['GET'])  # 代表个人中心页
 def get():  # 视图函数
     return 'healthy', 200
@@ -149,7 +187,6 @@ def getProduct():  # 视图函数
 @app.route('/v1/product', methods=['POST'])
 @auth.login_required()
 def createProduct():
-    #db.create_all()
     data = request.get_json()
     query = db.session.query(User).filter_by(username=auth.username()).all()
     quantity=data.get('quantity')
@@ -208,7 +245,6 @@ def updateProduct2():
     db.session.commit()
     return 'No content', 204
 
-
 @app.route('/v1/product', methods=['DELETE'])
 @auth.login_required()
 def deleteProduct():
@@ -222,8 +258,64 @@ def deleteProduct():
         db.session.commit()
         return 'No content', 204
 
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+@app.route('/v1/product/image', methods=['POST'])
+@auth.login_required()
+def uploadimage():
+    productId=request.args.get('productID')
+    files = request.files.getlist('file')
+    for file in files:
+        if not file or not allowed_file(file.filename):
+            return 'Bad Request',400
+        query=db.session.query(Product).filter_by(id=productId).first()
+        if not query or query.owner_user_id!=auth.current_user()[1]:
+            return "you can't upload to product you don't own",403
+    #metadata = {'key1': 'value1', 'key2': 'value2'}  # Replace with your own metadata
+        file_name = file.filename
+        num = db.session.query(Image).filter_by(file_name=file_name).count()
+        key = file_name+str(num)
+        url = f"https://{AWS_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{key}"
+        newImage = Image(productId, file_name, url,auth.current_user()[1],key)
+        db.session.add(newImage)
+        db.session.commit()
+        s3.upload_fileobj(file, AWS_BUCKET_NAME, key)
+    return newImage.to_json(),201
+
+@app.route('/v1/product/image', methods=['GET'])
+@auth.login_required()
+def getimage():
+    if not request.args.get('imageID'):
+        query=db.session.query(Image).filter_by(product_id=request.args.get('productID')).all()
+        list1=[]
+        for oneimage in query:
+            if oneimage.owner_user_id!=auth.current_user()[1]:
+                return 'Forbidden',403
+            list1.append(oneimage.to_json())
+        return list1
+    else:
+        query = db.session.query(Image).filter_by(image_id=request.args.get('imageID')).all()
+        if query[0].owner_user_id!=auth.current_user()[1]:
+            return 'Forbidden', 403
+        return query[0].to_json()
+
+@app.route('/v1/product/image', methods=['DELETE'])
+@auth.login_required()
+def deleteimage():
+    query = db.session.query(Image).filter_by(image_id=request.args.get('imageID')).first()
+    if not query:
+        return 'Not found',404
+    if query.owner_user_id!=auth.current_user()[1]:
+        return 'Forbidden', 403
+    else:
+        s3.delete_object(Bucket=AWS_BUCKET_NAME, Key=query.key)
+        db.session.delete(query)
+        db.session.commit()
+        return 'No content', 204
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)# 运行程序
-
+    app.run( host='0.0.0.0', port=8080)# 运行程序
 
