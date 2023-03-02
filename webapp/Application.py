@@ -21,8 +21,8 @@ db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 auth = HTTPBasicAuth()
 
-AWS_ACCESS_KEY_ID = 
-AWS_SECRET_ACCESS_KEY =
+#AWS_ACCESS_KEY_ID =
+#AWS_SECRET_ACCESS_KEY =
 AWS_REGION = 'us-east-1'
 AWS_BUCKET_NAME = s3_bucket_name
 
