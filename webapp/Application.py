@@ -21,15 +21,11 @@ db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 auth = HTTPBasicAuth()
 
-#AWS_ACCESS_KEY_ID =
-#AWS_SECRET_ACCESS_KEY =
 AWS_REGION = 'us-east-1'
 AWS_BUCKET_NAME = s3_bucket_name
 
 # S3 client
 s3 = boto3.client('s3',
-                  aws_access_key_id=AWS_ACCESS_KEY_ID,
-                  aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
                   region_name=AWS_REGION)
 @auth.verify_password
 def verify_password(username, password):
