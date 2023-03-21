@@ -56,6 +56,10 @@ build {
     source = "webapp"
     destination = "/tmp/webapp"
   }
+  provisioner "file" {
+    source = "cloudwatch-config.json"
+    destination = "/tmp/cloudwatch-config.json"
+  }
   provisioner "shell" {
     environment_vars = [
       "DEBIAN_FRONTEND=noninteractive",
@@ -65,6 +69,8 @@ build {
       "sudo yum upgrade -y",
       "sudo yum update -y",
       "sudo amazon-linux-extras install nginx1",
+	"sudo yum install amazon-cloudwatch-agent",
+	"sudo amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/tmp/cloudwatch-config.json",
 	"sudo python3 -m pip install flask cryptography Flask-SQLAlchemy PyMySQL Flask-Bcrypt Flask-HTTPAuth boto3",
 	"echo  >> /tmp/myapp.conf",
 	"sudo cp /tmp/webapp/myscript.service /etc/systemd/system/",

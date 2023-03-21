@@ -10,3 +10,4 @@
 *.3_x5
 *.0_x5
 *.pyc
+terraform/.terraform/modules/modules.json

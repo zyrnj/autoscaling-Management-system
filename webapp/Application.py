@@ -25,8 +25,7 @@ AWS_REGION = 'us-east-1'
 AWS_BUCKET_NAME = s3_bucket_name
 
 # S3 client
-s3 = boto3.client('s3',
-                  region_name=AWS_REGION)
+s3 = boto3.client('s3',region_name=AWS_REGION)
 @auth.verify_password
 def verify_password(username, password):
     query=db.session.query(User).filter_by(username=username).all()
